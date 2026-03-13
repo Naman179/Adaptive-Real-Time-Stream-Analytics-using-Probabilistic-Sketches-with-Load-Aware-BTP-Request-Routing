@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTP Stream Analytics — Live Dashboard</title>
+  <meta name="description" content="Real-time analytics dashboard for adaptive probabilistic sketch monitoring" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1 class="header-title">Stream Analytics</h1>
+          <p class="header-sub">Probabilistic Sketches · Adaptive Control · Load-Aware Routing</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting…</span>
+        <span class="badge" id="workerCount">0 workers</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- KPI Bar -->
+    <section class="kpi-bar">
+      <div class="kpi-card">
+        <div class="kpi-label">HLL Cardinality</div>
+        <div class="kpi-value" id="kpiCardinality">—</div>
+        <div class="kpi-sub" id="kpiCardinalityErr">rel. error: —</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">CMS Error Bound</div>
+        <div class="kpi-value" id="kpiCmsError">—</div>
+        <div class="kpi-sub" id="kpiCmsTotal">N = —</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Best P99 Latency</div>
+        <div class="kpi-value" id="kpiP99">—</div>
+        <div class="kpi-sub">across all workers</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Active Template</div>
+        <div class="kpi-value" id="kpiTemplate">—</div>
+        <div class="kpi-sub" id="kpiTemplateDetail">—</div>
+      </div>
+    </section>
+
+    <!-- Charts Row -->
+    <section class="charts-row">
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">P99 Latency History (ms)</span>
+          <span class="chart-badge">per worker</span>
+        </div>
+        <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Memory Usage (%)</span>
+          <span class="chart-badge">live</span>
+        </div>
+        <div class="chart-wrap"><canvas id="memoryChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Bottom Grid -->
+    <section class="bottom-grid">
+
+      <!-- Heavy Hitters Table -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">🏆 Heavy Hitters</span>
+          <span class="badge" id="mgWindow">window: —</span>
+        </div>
+        <table class="hh-table">
+          <thead>
+            <tr><th>#</th><th>Item</th><th>Est. Count</th><th>Share</th></tr>
+          </thead>
+          <tbody id="hhTableBody">
+            <tr><td colspan="4" class="empty-row">Waiting for data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Router Scores -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">🎯 Router Node Scores</span>
+          <span class="badge">frequency query</span>
+        </div>
+        <div id="routerScores" class="router-list">
+          <p class="empty-row">Waiting for workers…</p>
+        </div>
+        <div class="router-weights">
+          w₁(accuracy)=<b id="w1">0.5</b>
+          &nbsp;w₂(latency)=<b id="w2">0.3</b>
+          &nbsp;w₃(memory)=<b id="w3">0.2</b>
+        </div>
+      </div>
+
+      <!-- Controller Log -->
+      <div class="panel panel-wide">
+        <div class="panel-header">
+          <span class="panel-title">🧠 Controller Decisions</span>
+          <span class="badge" id="ctrlLogCount">0 events</span>
+        </div>
+        <div class="log-scroll" id="ctrlLog">
+          <p class="empty-row">No decisions yet — controller starts after first metric report</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Manual Control -->
+    <section class="control-panel">
+      <div class="control-header">⚙️ Manual Parameter Override</div>
+      <div class="control-body">
+        <div class="control-group">
+          <label>Worker ID</label>
+          <input type="text" id="ctrlWorkerId" placeholder="worker-0" />
+        </div>
+        <div class="control-group">
+          <label>Template</label>
+          <select id="ctrlTemplate">
+            <option value="low">Low (fast, less accurate)</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High (slow, more accurate)</option>
+          </select>
+        </div>
+        <button class="ctrl-btn" onclick="applyOverride()">Apply</button>
+        <span id="ctrlStatus" class="ctrl-status"></span>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
