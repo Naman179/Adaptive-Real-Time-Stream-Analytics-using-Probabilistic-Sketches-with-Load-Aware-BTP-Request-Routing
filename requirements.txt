@@ -1,5 +1,5 @@
 # Kafka client
-kafka-python==2.0.2
+kafka-python-ng>=2.2.3
 
 # Web framework
 fastapi==0.110.0

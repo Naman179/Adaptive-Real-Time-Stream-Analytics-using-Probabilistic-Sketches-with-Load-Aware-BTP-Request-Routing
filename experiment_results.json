@@ -1,0 +1,26 @@
+[
+  {
+    "config": "1. Baseline (static + round-robin)",
+    "avg_p99_ms": 0.0022500001553756497,
+    "avg_mem_mb": 0.101104736328125,
+    "avg_hll_err": 0.01625
+  },
+  {
+    "config": "2. Adaptive params + round-robin",
+    "avg_p99_ms": 0.0018886667021433823,
+    "avg_mem_mb": 0.101104736328125,
+    "avg_hll_err": 0.01625
+  },
+  {
+    "config": "3. Static params + smart router",
+    "avg_p99_ms": 0.01315266672463622,
+    "avg_mem_mb": 0.101104736328125,
+    "avg_hll_err": 0.01625
+  },
+  {
+    "config": "4. Fully adaptive (adaptive + smart)",
+    "avg_p99_ms": 0.018152666598325595,
+    "avg_mem_mb": 0.101104736328125,
+    "avg_hll_err": 0.01625
+  }
+]

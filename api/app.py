@@ -20,6 +20,7 @@ The adaptive controller runs as a background asyncio task on startup.
 import asyncio
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -39,24 +40,9 @@ from state.store import StateStore
 from router.router import LoadAwareRouter
 from controller.controller import AdaptiveController
 
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
-
-app = FastAPI(
-    title="BTP Sketch Analytics API",
-    description="Adaptive Real-Time Stream Analytics with Probabilistic Sketches",
-    version="1.0.0",
-)
-
-# Serve static dashboard files
-_DASHBOARD_DIR = Path(__file__).parent.parent / "dashboard"
-if (_DASHBOARD_DIR / "static").exists():
-    app.mount("/static", StaticFiles(directory=str(_DASHBOARD_DIR / "static")), name="static")
-
 # Singletons (initialised at startup)
 store: StateStore = None
-router: LoadAwareRouter = None
+router_instance: LoadAwareRouter = None
 controller: AdaptiveController = None
 
 
@@ -64,20 +50,44 @@ controller: AdaptiveController = None
 # Lifecycle
 # ---------------------------------------------------------------------------
 
-@app.on_event("startup")
-async def _startup():
-    global store, router, controller
+@asynccontextmanager
+async def lifespan(app):
+    global store, router_instance, controller
     store      = StateStore()
-    router     = LoadAwareRouter()
+    router_instance = LoadAwareRouter()
     controller = AdaptiveController()
     asyncio.create_task(controller.run())
     print("[API] Server started. Controller running in background.")
-
-
-@app.on_event("shutdown")
-async def _shutdown():
+    yield
     if controller:
         controller.stop()
+
+app = FastAPI(
+    title="BTP Sketch Analytics API",
+    description="Adaptive Real-Time Stream Analytics with Probabilistic Sketches",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# Serve static dashboard files
+_DASHBOARD_DIR = Path(__file__).parent.parent / "dashboard"
+if (_DASHBOARD_DIR / "static").exists():
+    app.mount("/static", StaticFiles(directory=str(_DASHBOARD_DIR / "static")), name="static")
+
+# Prevent browser caching of static files during development
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+app.add_middleware(NoCacheStaticMiddleware)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +121,7 @@ async def query_frequency(key: str = Query(..., description="Item key to query")
     Return the CMS frequency estimate for the given key.
     Automatically routes to the best worker via the load-aware router.
     """
-    best_wid, score, ranked = router.route("frequency")
+    best_wid, score, ranked = router_instance.route("frequency")
     if not best_wid:
         raise HTTPException(503, "No workers available")
 
@@ -146,7 +156,7 @@ async def query_frequency(key: str = Query(..., description="Item key to query")
 @app.get("/query/cardinality")
 async def query_cardinality():
     """Return the HLL cardinality estimate from the best worker."""
-    best_wid, score, ranked = router.route("cardinality")
+    best_wid, score, ranked = router_instance.route("cardinality")
     if not best_wid:
         raise HTTPException(503, "No workers available")
 
@@ -163,7 +173,7 @@ async def query_cardinality():
 @app.get("/query/heavy-hitters")
 async def query_heavy_hitters(n: int = Query(10, ge=1, le=100)):
     """Return the top-N Misra-Gries heavy hitters from the best worker."""
-    best_wid, score, ranked = router.route("heavy_hitters")
+    best_wid, score, ranked = router_instance.route("heavy_hitters")
     if not best_wid:
         raise HTTPException(503, "No workers available")
 
@@ -217,7 +227,7 @@ async def metrics_sketches():
 @app.get("/metrics/router")
 async def metrics_router(q: str = Query("frequency")):
     """Return router scores for each node for the given query type."""
-    return {"query_type": q, "ranked_nodes": router.get_node_scores(q)}
+    return {"query_type": q, "ranked_nodes": router_instance.get_node_scores(q)}
 
 
 @app.get("/metrics/controller-log")

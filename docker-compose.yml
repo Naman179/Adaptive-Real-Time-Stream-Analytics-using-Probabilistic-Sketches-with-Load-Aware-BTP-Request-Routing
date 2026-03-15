@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   zookeeper:
@@ -26,7 +25,10 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 1
@@ -48,3 +50,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # ---------------------------------------------------------------------------
+  # C++ Analytics Worker (high-performance, interchangeable with stream/worker.py)
+  # ---------------------------------------------------------------------------
+  worker_cpp:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: btp_worker_cpp
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: stream_events
+      REDIS_URL: redis://redis:6379
+    command: ["--worker-id", "worker-cpp", "--template", "medium"]
+    restart: on-failure
+    # Optional: scale this service (docker compose up --scale worker_cpp=2)
+    profiles:
+      - cpp   # run with: docker compose --profile cpp up -d

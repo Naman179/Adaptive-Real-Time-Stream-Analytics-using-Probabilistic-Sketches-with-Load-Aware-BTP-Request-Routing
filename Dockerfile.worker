@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+
+# ============================================================
+# Stage 1: Builder — compiles the C++ worker
+# ============================================================
+FROM debian:bookworm-slim AS builder
+
+# System build tools + librdkafka development headers
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        ninja-build \
+        pkg-config \
+        git \
+        ca-certificates \
+        librdkafka-dev \
+        libssl-dev \
+        libsasl2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy all C++ source files
+COPY cpp/ .
+
+# Configure + build (Release mode)
+RUN cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build -- -j$(nproc)
+
+# ============================================================
+# Stage 2: Runtime — minimal image with only the binary
+# ============================================================
+FROM debian:bookworm-slim AS runtime
+
+# Only runtime libraries needed (not the dev headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        librdkafka1 \
+        libssl3 \
+        libsasl2-2 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/build/btp_worker /usr/local/bin/btp_worker
+
+# Default environment (overridden by docker-compose or .env)
+ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+    KAFKA_TOPIC=stream_events \
+    REDIS_URL=redis://redis:6379
+
+ENTRYPOINT ["btp_worker"]
+CMD ["--worker-id", "worker-cpp", "--template", "medium"]

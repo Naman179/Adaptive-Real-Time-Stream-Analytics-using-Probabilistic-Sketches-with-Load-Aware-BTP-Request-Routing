@@ -3,148 +3,313 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTP Stream Analytics — Live Dashboard</title>
-  <meta name="description" content="Real-time analytics dashboard for adaptive probabilistic sketch monitoring" />
+  <title>Stream Analytics — Live Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="bg-grid"></div>
 
-  <!-- Header -->
-  <header class="header">
-    <div class="header-inner">
-      <div class="header-brand">
-        <div class="logo-icon">⚡</div>
-        <div>
-          <h1 class="header-title">Stream Analytics</h1>
-          <p class="header-sub">Probabilistic Sketches · Adaptive Control · Load-Aware Routing</p>
-        </div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
       </div>
-      <div class="header-status">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Connecting…</span>
-        <span class="badge" id="workerCount">0 workers</span>
-      </div>
+      <span>BTP Analytics</span>
     </div>
-  </header>
 
-  <main class="main">
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Overview
+      </a>
+      <a href="/docs" target="_blank" class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        API Docs
+      </a>
+      <a href="/metrics/cluster" target="_blank" class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Raw Metrics
+      </a>
+    </nav>
 
-    <!-- KPI Bar -->
-    <section class="kpi-bar">
-      <div class="kpi-card">
-        <div class="kpi-label">HLL Cardinality</div>
-        <div class="kpi-value" id="kpiCardinality">—</div>
-        <div class="kpi-sub" id="kpiCardinalityErr">rel. error: —</div>
+    <div class="sidebar-section-label">System</div>
+    <div class="system-stats" id="sidebarStats">
+      <div class="sys-row"><span class="sys-label">Workers</span><span class="sys-val" id="sysWorkers">—</span></div>
+      <div class="sys-row"><span class="sys-label">Template</span><span class="sys-val" id="sysTemplate">—</span></div>
+      <div class="sys-row"><span class="sys-label">Cardinality</span><span class="sys-val" id="sysCardinality">—</span></div>
+      <div class="sys-row"><span class="sys-label">Total Events</span><span class="sys-val" id="sysTotal">—</span></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-row">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText" class="status-label">Connecting</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">CMS Error Bound</div>
-        <div class="kpi-value" id="kpiCmsError">—</div>
-        <div class="kpi-sub" id="kpiCmsTotal">N = —</div>
+      <span class="last-update" id="lastUpdate">—</span>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">Overview</h1>
+        <span class="page-sub">Adaptive Real-Time Stream Analytics · LNMIIT</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Best P99 Latency</div>
-        <div class="kpi-value" id="kpiP99">—</div>
-        <div class="kpi-sub">across all workers</div>
+      <div class="topbar-right">
+        <div class="algo-tags">
+          <span class="tag">Count-Min Sketch</span>
+          <span class="tag">HyperLogLog</span>
+          <span class="tag">Misra–Gries</span>
+        </div>
+        <button class="refresh-btn" onclick="poll()">↻ Refresh</button>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Active Template</div>
-        <div class="kpi-value" id="kpiTemplate">—</div>
-        <div class="kpi-sub" id="kpiTemplateDetail">—</div>
+    </header>
+
+    <!-- LIVE SKETCH ANSWERS -->
+    <section class="live-answers">
+      <h2 class="section-title">Live Sketch Estimates</h2>
+      <div class="grid-3">
+        <!-- HLL Card -->
+        <div class="answer-card">
+          <div class="answer-header">
+            <span class="answer-title">Unique Items</span>
+            <span class="kpi-tag kpi-tag-blue">HyperLogLog</span>
+          </div>
+          <div class="answer-value" id="ansHllVal">—</div>
+          <div class="answer-desc" id="ansHllErr">Relative error: —</div>
+        </div>
+        <!-- MG Card -->
+        <div class="answer-card">
+          <div class="answer-header">
+            <span class="answer-title">Top Heavy Hitter</span>
+            <span class="kpi-tag kpi-tag-rose">Misra–Gries</span>
+          </div>
+          <div class="answer-value mono answer-value-sm" id="ansMgVal">—</div>
+          <div class="answer-desc" id="ansMgShare">Share of window: —</div>
+        </div>
+        <!-- CMS Card -->
+        <div class="answer-card">
+          <div class="answer-header">
+            <span class="answer-title">Top Item Frequency</span>
+            <span class="kpi-tag kpi-tag-violet">Count-Min</span>
+          </div>
+          <div class="answer-value" id="ansCmsVal">—</div>
+          <div class="answer-desc" id="ansCmsErr">Error bound: —</div>
+        </div>
       </div>
     </section>
 
-    <!-- Charts Row -->
-    <section class="charts-row">
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">P99 Latency History (ms)</span>
-          <span class="chart-badge">per worker</span>
+    <!-- KPI strip -->
+    <section class="kpi-strip">
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kpi-label">HLL Cardinality</span>
+          <span class="kpi-tag kpi-tag-blue">HyperLogLog</span>
+        </div>
+        <div class="kpi-val" id="kpiCardinality">—</div>
+        <div class="kpi-foot" id="kpiCardinalityErr">Relative error: —</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kpi-label">CMS Total Events</span>
+          <span class="kpi-tag kpi-tag-violet">Count-Min</span>
+        </div>
+        <div class="kpi-val" id="kpiCmsTotal">—</div>
+        <div class="kpi-foot" id="kpiCmsError">Error bound: —</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kpi-label">P99 Latency</span>
+          <span class="kpi-tag kpi-tag-green">Best worker</span>
+        </div>
+        <div class="kpi-val" id="kpiP99">—</div>
+        <div class="kpi-foot">End-to-end sketch update</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kpi-label">CPU / Mem Usage</span>
+          <span class="kpi-tag kpi-tag-amber">System</span>
+        </div>
+        <div class="kpi-val"><span id="kpiCpu">—</span> / <span id="kpiMem">—</span></div>
+        <div class="kpi-foot">Avg across workers</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kpi-label">Throughput</span>
+          <span class="kpi-tag kpi-tag-blue">Live</span>
+        </div>
+        <div class="kpi-val mono" id="kpiThroughput">—</div>
+        <div class="kpi-foot">Events / second</div>
+      </div>
+    </section>
+
+    <!-- Charts row -->
+    <section class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">P99 Latency History</div>
+            <div class="card-sub">per worker · milliseconds</div>
+          </div>
+          <span class="live-badge">LIVE</span>
         </div>
         <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
       </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Memory Usage (%)</span>
-          <span class="chart-badge">live</span>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">CPU & Memory per Worker</div>
+            <div class="card-sub">percent of system capacity</div>
+          </div>
+          <span class="live-badge">LIVE</span>
         </div>
         <div class="chart-wrap"><canvas id="memoryChart"></canvas></div>
       </div>
     </section>
 
-    <!-- Bottom Grid -->
-    <section class="bottom-grid">
+    <!-- Bottom row -->
+    <section class="grid-3">
 
-      <!-- Heavy Hitters Table -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">🏆 Heavy Hitters</span>
-          <span class="badge" id="mgWindow">window: —</span>
+      <!-- Heavy hitters -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Heavy Hitters</div>
+          <span class="badge" id="mgWindow">N = —</span>
         </div>
-        <table class="hh-table">
-          <thead>
-            <tr><th>#</th><th>Item</th><th>Est. Count</th><th>Share</th></tr>
-          </thead>
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Item</th><th>Count</th><th>Share</th></tr></thead>
           <tbody id="hhTableBody">
-            <tr><td colspan="4" class="empty-row">Waiting for data…</td></tr>
+            <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Router Scores -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">🎯 Router Node Scores</span>
-          <span class="badge">frequency query</span>
+      <!-- Router scores -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Router Node Scores</div>
+          <div class="tab-group" id="routerTabs">
+            <button class="tab active" onclick="setRouterQuery('frequency',this)">Freq</button>
+            <button class="tab" onclick="setRouterQuery('cardinality',this)">Card</button>
+            <button class="tab" onclick="setRouterQuery('heavy_hitters',this)">HH</button>
+          </div>
         </div>
-        <div id="routerScores" class="router-list">
-          <p class="empty-row">Waiting for workers…</p>
+        <div class="node-list" id="routerScores">
+          <p class="empty">No workers registered yet</p>
         </div>
         <div class="router-weights">
-          w₁(accuracy)=<b id="w1">0.5</b>
-          &nbsp;w₂(latency)=<b id="w2">0.3</b>
-          &nbsp;w₃(memory)=<b id="w3">0.2</b>
+          <span>w₁=<b id="w1">0.50</b></span>
+          <span>w₂=<b id="w2">0.30</b></span>
+          <span>w₃=<b id="w3">0.20</b></span>
         </div>
       </div>
 
-      <!-- Controller Log -->
-      <div class="panel panel-wide">
-        <div class="panel-header">
-          <span class="panel-title">🧠 Controller Decisions</span>
+      <!-- Controller log -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Controller Decisions</div>
           <span class="badge" id="ctrlLogCount">0 events</span>
         </div>
-        <div class="log-scroll" id="ctrlLog">
-          <p class="empty-row">No decisions yet — controller starts after first metric report</p>
+        <div class="log-box" id="ctrlLog">
+          <p class="empty">No decisions yet</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lower row: Query + Override -->
+    <section class="grid-2">
+
+      <!-- Query explorer -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Query Explorer</div>
+          <div class="tab-group" id="queryTabs">
+            <button class="tab active" onclick="setQType('frequency',this)">Frequency</button>
+            <button class="tab" onclick="setQType('cardinality',this)">Cardinality</button>
+            <button class="tab" onclick="setQType('heavy-hitters',this)">Heavy Hitters</button>
+          </div>
+        </div>
+        <div class="query-area">
+          <div class="query-row" id="queryInputRow">
+            <input id="queryKey" class="text-input mono" type="text" placeholder="item_42" />
+            <button class="btn-primary" onclick="runQuery()">Run</button>
+          </div>
+          <pre class="query-out" id="queryResult">// Select a query type and press Run</pre>
+        </div>
+      </div>
+
+      <!-- Manual override -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Manual Override</div>
+        </div>
+        <div class="override-area">
+          <div class="field">
+            <label class="field-label">Worker ID</label>
+            <input id="ctrlWorkerId" class="text-input mono" type="text" placeholder="worker-0" />
+          </div>
+          <div class="field">
+            <label class="field-label">Precision Template</label>
+            <div class="seg-ctrl">
+              <button class="seg" onclick="pickTpl('low',this)">Low</button>
+              <button class="seg seg-active" onclick="pickTpl('medium',this)">Medium</button>
+              <button class="seg" onclick="pickTpl('high',this)">High</button>
+            </div>
+          </div>
+          <button class="btn-primary full-width" onclick="applyOverride()">Apply</button>
+          <div id="ctrlStatus" class="override-status"></div>
+          <div class="template-hint">
+            <div><b>Low</b> — CMS 512×3, HLL p=10, MG k=50</div>
+            <div><b>Medium</b> — CMS 2048×5, HLL p=12, MG k=200</div>
+            <div><b>High</b> — CMS 8192×7, HLL p=14, MG k=500</div>
+          </div>
         </div>
       </div>
 
     </section>
 
-    <!-- Manual Control -->
-    <section class="control-panel">
-      <div class="control-header">⚙️ Manual Parameter Override</div>
-      <div class="control-body">
-        <div class="control-group">
-          <label>Worker ID</label>
-          <input type="text" id="ctrlWorkerId" placeholder="worker-0" />
-        </div>
-        <div class="control-group">
-          <label>Template</label>
-          <select id="ctrlTemplate">
-            <option value="low">Low (fast, less accurate)</option>
-            <option value="medium" selected>Medium</option>
-            <option value="high">High (slow, more accurate)</option>
-          </select>
-        </div>
-        <button class="ctrl-btn" onclick="applyOverride()">Apply</button>
-        <span id="ctrlStatus" class="ctrl-status"></span>
+    <!-- Algorithm reference -->
+    <section class="algo-row">
+      <div class="algo-card">
+        <div class="algo-name">Count-Min Sketch</div>
+        <div class="algo-desc">d×w counter array. Frequency estimated as min over d hash positions.</div>
+        <code class="algo-eq">f̂(x) ≤ f(x) + ε·N, prob 1−δ</code>
+        <div class="algo-params">w=⌈e/ε⌉ &nbsp;·&nbsp; d=⌈ln 1/δ⌉ &nbsp;·&nbsp; O(wd)</div>
+      </div>
+      <div class="algo-card">
+        <div class="algo-name">HyperLogLog</div>
+        <div class="algo-desc">m=2<sup>p</sup> registers. Estimates cardinality via harmonic mean of leading-zero runs.</div>
+        <code class="algo-eq">Rel. error ≈ 1.04 / √m</code>
+        <div class="algo-params">p=12 → 4096 regs → ±1.6% &nbsp;·&nbsp; O(m)</div>
+      </div>
+      <div class="algo-card">
+        <div class="algo-name">Misra–Gries</div>
+        <div class="algo-desc">Keeps k−1 candidates. Items surviving appear &gt; N/k times. Sliding window eviction.</div>
+        <code class="algo-eq">Error ≤ N / k per candidate</code>
+        <div class="algo-params">k candidates &nbsp;·&nbsp; window=10,000 &nbsp;·&nbsp; O(k)</div>
+      </div>
+      <div class="algo-card">
+        <div class="algo-name">Adaptive Controller</div>
+        <div class="algo-desc">Rule-based loop every 5 s. Trades accuracy for latency/memory by switching templates.</div>
+        <code class="algo-eq">min α·Lat + β·Mem + γ·Err</code>
+        <div class="algo-params">P99&gt;200ms → downgrade &nbsp;·&nbsp; err&gt;5% → upgrade</div>
       </div>
     </section>
 
-  </main>
+  </div><!-- /content -->
 
   <script src="/static/dashboard.js"></script>
 </body>

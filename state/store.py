@@ -21,10 +21,11 @@ REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT  = int(os.getenv("REDIS_PORT", "6379"))
 
 # Redis key patterns
-_METRICS_KEY   = "btp:worker:metrics:{worker_id}"
+# IMPORTANT: These must match cpp/worker/redis_reporter.hpp exactly.
+_METRICS_KEY   = "worker:{worker_id}:metrics"
 _CTRL_LOG_KEY  = "btp:controller:log"
-_WORKERS_SET   = "btp:workers"          # set of known worker IDs
-_QUERY_LOG_KEY = "btp:router:queries"   # recent query routing decisions
+_WORKERS_SET   = "btp:workers"            # set of known worker IDs
+_QUERY_LOG_KEY = "btp:router:queries"     # recent query routing decisions
 
 
 class StateStore:
@@ -65,7 +66,7 @@ class StateStore:
         # Register this worker in the global set
         self.redis.sadd(_WORKERS_SET, worker_id)
         # Append P99 latency to a ring-buffer list (for sparkline charts)
-        history_key = f"btp:worker:latency_history:{worker_id}"
+        history_key = f"worker:{worker_id}:latency_history"
         self.redis.rpush(history_key, metrics.get("p99_latency_ms", 0))
         self.redis.ltrim(history_key, -60, -1)  # keep last 60 values
         self.redis.expire(history_key, 120)
@@ -76,9 +77,9 @@ class StateStore:
         raw = self.redis.get(key)
         return json.loads(raw) if raw else None
 
-    def get_latency_history(self, worker_id: str) -> List[float]:
+    def get_latency_history(self, worker_id: str) -> list:
         """Return the last 60 P99 latency readings for a worker."""
-        history_key = f"btp:worker:latency_history:{worker_id}"
+        history_key = f"worker:{worker_id}:latency_history"
         vals = self.redis.lrange(history_key, 0, -1)
         return [float(v) for v in vals]
 
