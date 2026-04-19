@@ -11,6 +11,7 @@
 [![Kafka](https://img.shields.io/badge/Kafka-7.5.0-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io)
 [![Tests](https://img.shields.io/badge/Tests-28%20passed-22c55e?logo=pytest&logoColor=white)](#running-tests)
+[![Future Scope](https://img.shields.io/badge/Research-Future%20Scope-black?logo=gitbook&logoColor=white)](futurescope.md)
 
 </div>
 
@@ -24,6 +25,7 @@
    - [Probabilistic Sketches](#probabilistic-sketches)
    - [Adaptive Controller](#adaptive-controller)
    - [Load-Aware Router](#load-aware-router)
+   - [Future Scope & Research Directions](futurescope.md)
    - [Stream Ingestion (Kafka)](#stream-ingestion-kafka)
    - [State Store (Redis)](#state-store-redis)
    - [Analytics API (FastAPI)](#analytics-api-fastapi)
@@ -186,6 +188,16 @@ The analytics worker(s) consume from this topic, update their local sketch insta
 
 ---
 
+### Concept Drift Simulation
+
+Standard analytics systems often fail when the "Trending" items change suddenly. This project includes a **Concept Drift Generator** to demonstrate the adaptive nature of sliding-window sketches.
+
+- **Non-Stationary Data:** By using the `--shift-interval` flag in the producer, the system periodically rotates the Zipfian ranks. 
+- **The Shift:** If `--shift-interval 30` is set, every 30 seconds the most frequent item (e.g., `item_1`) is swapped with a random item from the tail.
+- **Verification:** This allows you to observe the **Sliding-Window Misra-Gries** in real-time as it "forgets" the old king and identifies the new trending item within seconds on the dashboard.
+
+---
+
 ### State Store (Redis)
 
 Redis is the **shared blackboard** between all components:
@@ -312,10 +324,11 @@ With multiple workers at different precision templates, the **Router Scores** pa
 python3 stream/producer.py [OPTIONS]
 
 Options:
-  --rate     EVENT/s to generate (default 5000, 0 = unlimited)
-  --zipf     Zipf skewness s parameter (default 1.2)
-  --items    Vocabulary size / number of unique items (default 10000)
-  --duration Run for N seconds then stop (default 0 = infinite)
+  --rate           EVENT/s to generate (default 5000, 0 = unlimited)
+  --zipf           Zipf skewness s parameter (default 1.2)
+  --items          Vocabulary size / number of unique items (default 10000)
+  --duration       Run for N seconds then stop (default 0 = infinite)
+  --shift-interval Rotate rank distribution every N seconds to simulate Concept Drift
 ```
 
 Examples:
@@ -328,6 +341,9 @@ python3 stream/producer.py --rate 10000 --zipf 1.5
 
 # Uniform distribution (no skew)
 python3 stream/producer.py --zipf 0.0
+
+# Concept Drift Simulation (Heavy hitters swap every 30 seconds)
+python3 stream/producer.py --rate 2000 --shift-interval 30
 ```
 
 ### Python Analytics Worker

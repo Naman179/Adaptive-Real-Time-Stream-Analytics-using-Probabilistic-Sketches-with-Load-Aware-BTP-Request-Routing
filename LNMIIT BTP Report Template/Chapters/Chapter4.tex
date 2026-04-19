@@ -1,0 +1,131 @@
+\section{Implementation Environment}
+
+The system was developed and tested using the following technology stack:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l l}
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+Stream Broker       & Apache Kafka 7.5 (via Docker Compose) \\
+Coordination        & Apache Zookeeper (via Docker Compose) \\
+State Store         & Redis 7 \\
+API Server          & FastAPI + Uvicorn (Python 3.11+) \\
+Python Worker       & kafka-python-ng, mmh3, psutil, redis-py \\
+C++ Worker          & C++20, librdkafka, xxHash, CMake + Ninja \\
+Dashboard           & HTML5, CSS3, Chart.js, vanilla JavaScript \\
+Containerization    & Docker Compose (multi-service orchestration) \\
+Testing             & pytest (28 Python tests), Catch2 (C++ tests) \\
+\bottomrule
+\end{tabular}
+\caption{Technology stack used in the Phase~1 implementation.}
+\label{tab:tech_stack}
+\end{table}
+
+All infrastructure services (Kafka, Zookeeper, Redis) are orchestrated via a single \texttt{docker-compose.yml} file. The C++ worker can optionally be built and run via Docker using a multi-stage \texttt{Dockerfile.worker}.
+
+\section{Interactive Dashboard}
+
+A fully functional, single-page real-time web dashboard was developed to visualize cluster metrics. The dashboard polls the \texttt{/metrics/cluster} endpoint every 2 seconds and renders all data using Chart.js for interactive charting.
+
+\begin{figure}[htbp]
+    \centering
+    % PLACEHOLDER: Replace with your dashboard screenshot in Overleaf
+    % \includegraphics[width=0.9\textwidth]{Figures/dashboard_screenshot.png}
+    \framebox[\textwidth]{\rule{0pt}{7cm}\parbox{0.8\textwidth}{\centering\Large\textbf{[PLACEHOLDER]}\\[1em]\normalsize Upload your dashboard screenshot to the \texttt{Figures/} folder in Overleaf and uncomment the \texttt{includegraphics} line above.}}
+    \caption{Web dashboard showing live sketch estimates, heavy hitters list, P99 latency charts, and system resource usage.}
+    \label{fig:dashboard_screenshot}
+\end{figure}
+
+The dashboard interface is organized into the following sections:
+
+\subsection{Live Sketch Estimate Cards}
+Three prominent cards display the live answers from each probabilistic sketch:
+\begin{itemize}
+    \item \textbf{Unique Items} (HyperLogLog): Estimated number of distinct items with relative error percentage.
+    \item \textbf{Top Heavy Hitter} (Misra--Gries): The most frequent item in the current sliding window and its share.
+    \item \textbf{Top Item Frequency} (Count-Min Sketch): Estimated frequency count with error bound.
+\end{itemize}
+
+\subsection{Key Performance Indicator Strip}
+Six compact metric boxes display HLL cardinality, CMS total events processed, P99 latency, average CPU usage, average memory usage, and real-time throughput (events per second).
+
+\subsection{Charts}
+\begin{itemize}
+    \item \textbf{P99 Latency History:} A multi-line time-series chart showing the latency trend per worker over time. Each worker is rendered in a different color with a pulsing ``LIVE'' indicator.
+    \item \textbf{CPU and Memory per Worker:} A grouped bar chart showing both CPU and memory usage side by side for each worker.
+\end{itemize}
+
+\subsection{Heavy Hitters Table}
+A ranked table of the top-12 most frequent items detected by Misra--Gries, with visual percentage share bars for each entry.
+
+\subsection{Query Explorer}
+An interactive panel allowing users to test queries directly from the dashboard:
+\begin{itemize}
+    \item \textbf{Frequency tab:} Enter an item key and retrieve the CMS frequency estimate with error bounds.
+    \item \textbf{Cardinality tab:} Retrieve the current HLL distinct count estimate.
+    \item \textbf{Heavy Hitters tab:} Retrieve the top-$N$ items from Misra--Gries.
+\end{itemize}
+
+\section{Testing and Validation}
+
+\subsection{Unit Test Suite}
+A comprehensive test suite of 28 Python unit tests validates the correctness of all implemented components:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l c l}
+\toprule
+\textbf{Component} & \textbf{Tests} & \textbf{Key Assertions} \\
+\midrule
+Count-Min Sketch & 6 & Error bounds, no-undercount guarantee, memory \\
+HyperLogLog      & 7 & Cardinality accuracy, duplicate handling, precision levels \\
+Misra--Gries     & 7 & Heavy hitter detection, window eviction, sorting \\
+Router           & 8 & Scoring formula, node ranking, edge cases \\
+\bottomrule
+\end{tabular}
+\caption{Summary of the Python unit test suite (28 tests total, all passing).}
+\label{tab:test_suite}
+\end{table}
+
+All 28 tests pass without requiring any infrastructure (no Kafka or Redis needed). The C++ sketches are independently validated via Catch2 unit tests.
+
+\subsection{Standalone Simulation}
+A standalone benchmark (\texttt{scripts/run\_simulation.py}) runs entirely in-process without any external dependencies. It evaluates four experimental configurations across 100,000 synthetic events:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{c l l l}
+\toprule
+\textbf{Config} & \textbf{Router} & \textbf{Parameters} & \textbf{Description} \\
+\midrule
+1 & Round-robin  & Static   & Baseline \\
+2 & Round-robin  & Adaptive & Controller tunes parameters \\
+3 & Smart router & Static   & Load-aware routing only \\
+4 & Smart router & Adaptive & Fully adaptive (Phase~2 target) \\
+\bottomrule
+\end{tabular}
+\caption{Four experimental configurations evaluated in the standalone simulation.}
+\label{tab:simulation_configs}
+\end{table}
+
+\subsection{Sample Query Validation}
+The following sample queries were executed against a running system to verify end-to-end correctness:
+
+\begin{lstlisting}[language=bash, caption=Sample frequency query and response.]
+$ curl "http://localhost:8000/query/frequency?key=item_1"
+
+{
+  "key": "item_1",
+  "routed_to": "worker-0",
+  "cms_error_bound": 323.31,
+  "cms_total_count": 243590,
+  "worker_metrics": {
+    "template": "medium",
+    "memory_percent": 81.7
+  }
+}
+\end{lstlisting}
+
+With a Zipfian distribution ($s = 1.2$), \texttt{item\_1} consistently exhibits the highest estimated frequency, confirming the correctness of the Count-Min Sketch implementation. Similarly, HLL cardinality estimates for a 10,000-item vocabulary consistently fall within the expected $\pm$1.6\% error range for $p = 12$.

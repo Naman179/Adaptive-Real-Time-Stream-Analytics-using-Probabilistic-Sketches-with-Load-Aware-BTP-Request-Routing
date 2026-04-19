@@ -36,9 +36,10 @@ class ZipfSampler:
     s : float — skewness parameter (s=1.0 is standard Zipf)
     """
 
-    def __init__(self, n: int = 10_000, s: float = 1.2):
+    def __init__(self, n: int = 10_000, s: float = 1.2, offset: int = 0):
         self.n = n
         self.s = s
+        self.offset = offset
         # Pre-compute CDF for fast sampling
         weights = [1.0 / (k ** s) for k in range(1, n + 1)]
         total = sum(weights)
@@ -59,7 +60,7 @@ class ZipfSampler:
                 lo = mid + 1
             else:
                 hi = mid
-        return f"item_{lo + 1}"
+        return f"item_{((lo + self.offset) % self.n) + 1}"
 
 
 # ---- Producer -------------------------------------------------------
@@ -78,8 +79,10 @@ class StreamProducer:
         topic: str = KAFKA_TOPIC,
         n_items: int = 10_000,
         zipf_s: float = 1.2,
+        shift_interval_sec: float = 0,
     ):
         self.topic = topic
+        self.shift_interval_sec = shift_interval_sec
         self.sampler = ZipfSampler(n=n_items, s=zipf_s)
         self._connect(bootstrap_servers)
 
@@ -106,7 +109,11 @@ class StreamProducer:
         rate=0 means as fast as possible.
         """
         print(f"[Producer] Streaming to topic '{self.topic}' at {rate} events/sec ...")
+        if self.shift_interval_sec > 0:
+            print(f"[Producer] CONCEPT DRIFT ENABLED: Distribution shifts every {self.shift_interval_sec}s")
+            
         start = time.time()
+        last_shift = start
         sent = 0
         interval = 1.0 / rate if rate > 0 else 0
 
@@ -115,6 +122,14 @@ class StreamProducer:
                 elapsed = time.time() - start
                 if elapsed >= duration_sec:
                     break
+                    
+                # Concept drift logic
+                if self.shift_interval_sec > 0 and (time.time() - last_shift) >= self.shift_interval_sec:
+                    new_offset = random.randint(0, self.sampler.n - 1)
+                    self.sampler.offset = new_offset
+                    last_shift = time.time()
+                    print(f"\n[Producer] ⚠️ CONCEPT DRIFT: Distribution shifted! "
+                          f"New top item is item_{new_offset + 1}\n")
 
                 event = {
                     "key": self.sampler.sample(),
@@ -144,9 +159,10 @@ if __name__ == "__main__":
     parser.add_argument("--zipf",     type=float, default=1.2,   help="Zipf skewness parameter")
     parser.add_argument("--items",    type=int,   default=10000, help="Vocabulary size")
     parser.add_argument("--duration", type=float, default=0,     help="Duration in seconds (0 = infinite)")
+    parser.add_argument("--shift-interval", type=float, default=0, help="Shift distribution every X seconds (concept drift)")
     args = parser.parse_args()
 
-    producer = StreamProducer(n_items=args.items, zipf_s=args.zipf)
+    producer = StreamProducer(n_items=args.items, zipf_s=args.zipf, shift_interval_sec=args.shift_interval)
     producer.run(
         rate=args.rate,
         duration_sec=args.duration if args.duration > 0 else float("inf"),

@@ -1,0 +1,121 @@
+\section{Background on Approximate Counting}
+
+The field of streaming algorithms focuses on processing sequences of items efficiently under extreme memory constraints. For many network monitoring and metric aggregation problems, probabilistic estimations offer a vastly superior operational advantage over exact counts. In a production environment, a database query taking 5 seconds to provide exact numbers has far less utility than a sketch-based metric arriving in 5 milliseconds with a guaranteed 1\% margin of error. The foundational work by Morris~\cite{morris1978counting} demonstrated that approximate counting with logarithmic space is feasible, laying the groundwork for the modern sketch-based algorithms discussed in this chapter.
+
+\section{Count-Min Sketch (CMS)}
+
+The Count-Min Sketch, introduced by Cormode and Muthukrishnan~\cite{cms}, is a compact data structure that serves a randomized frequency table. It answers the point query: \textit{``How many times has item $x$ appeared in the stream?''}
+
+\subsection{Data Structure}
+Structurally, the CMS is a two-dimensional array of integer counters with $d$ rows and $w$ columns. Each row is associated with an independent pairwise hash function $h_i : \mathcal{U} \rightarrow \{0, 1, \ldots, w-1\}$ for $i = 1, 2, \ldots, d$.
+
+\subsection{Update Operation}
+When an element $x$ arrives in the stream, for each hash function $h_i$, the counter at position $(i, h_i(x))$ is incremented by 1. The update cost is $O(d)$ hash computations and increments.
+
+\subsection{Query Operation}
+To estimate the frequency $\hat{f}(x)$ of an element $x$, we compute:
+\begin{equation}
+    \hat{f}(x) = \min_{1 \le i \le d} \; \text{table}[i][h_i(x)]
+\end{equation}
+
+\subsection{Error Guarantees}
+By dimensioning the sketch with $w = \lceil e/\epsilon \rceil$ columns and $d = \lceil \ln(1/\delta) \rceil$ rows, the CMS guarantees:
+\begin{equation}
+    f(x) \le \hat{f}(x) \le f(x) + \epsilon N \quad \text{with probability at least } 1-\delta
+\end{equation}
+where $N$ is the total number of events processed. The memory consumed is strictly bounded to $O(w \cdot d)$ integer counters.
+
+\subsection{Parameter Templates Used}
+In our implementation, we define three precision templates to allow runtime trade-offs:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{Template} & \textbf{Width ($w$)} & \textbf{Depth ($d$)} & $\epsilon$ & $\delta$ \\
+\midrule
+Low    & 512   & 3 & 0.0053 & 0.05 \\
+Medium & 2,048 & 5 & 0.0013 & 0.007 \\
+High   & 8,192 & 7 & 0.0003 & 0.0009 \\
+\bottomrule
+\end{tabular}
+\caption{Count-Min Sketch parameter templates with corresponding error bounds.}
+\label{tab:cms_templates}
+\end{table}
+
+\section{HyperLogLog (HLL)}
+
+Calculating unique occurrences in an unbounded continuous stream of IP addresses, session IDs, or user tokens is exceptionally demanding. The HyperLogLog algorithm, presented by Flajolet et al.~\cite{hll}, builds upon the earlier LogLog counting approach~\cite{durand2003loglog} and provides near-optimal cardinality estimation.
+
+\subsection{Algorithm}
+HLL employs stochastic averaging utilizing $m = 2^p$ indexable registers. For each stream element $x$:
+\begin{enumerate}
+    \item Compute a hash $h(x)$.
+    \item Use the first $p$ bits of the hash to select a register index $j$.
+    \item Count the position of the leftmost 1-bit in the remaining bits, denoted $\rho(x)$.
+    \item Update: $\text{registers}[j] \leftarrow \max(\text{registers}[j], \rho(x))$.
+\end{enumerate}
+
+The cardinality estimate is computed via the harmonic mean:
+\begin{equation}
+    E = \alpha_m \cdot m^2 \cdot \left( \sum_{j=0}^{m-1} 2^{-\text{registers}[j]} \right)^{-1}
+\end{equation}
+where $\alpha_m$ is a bias-correction constant.
+
+\subsection{Error Bound}
+The relative standard error of HLL is:
+\begin{equation}
+    \text{RSE} \approx \frac{1.04}{\sqrt{m}}
+\end{equation}
+
+This permits near-perfect deduplication requiring mere kilobytes instead of megabytes of storage. The practical improvements to HLL proposed by Heule et al.~\cite{heule2013hyperloglog} are also applicable to our implementation.
+
+\subsection{Precision Levels Used}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Template} & \textbf{Precision ($p$)} & \textbf{Registers ($m$)} & \textbf{Error (\%)} \\
+\midrule
+Low    & 10 & 1,024   & $\pm$3.2\% \\
+Medium & 12 & 4,096   & $\pm$1.6\% \\
+High   & 14 & 16,384  & $\pm$0.8\% \\
+\bottomrule
+\end{tabular}
+\caption{HyperLogLog precision levels with corresponding register counts and error rates.}
+\label{tab:hll_precision}
+\end{table}
+
+\section{Sliding-Window Misra--Gries}
+
+Identifying the Top-N most frequent items within a telemetry stream is critical for alerting and anomaly detection. The classic Misra--Gries algorithm~\cite{misra} ensures deterministic heavy hitter tracking. Related work by Charikar et al.~\cite{charikar2002frequent} provides additional frequency estimation methods in the streaming model.
+
+\subsection{Algorithm}
+The algorithm maintains at most $k-1$ candidate items alongside their counts. When a new item $x$ arrives:
+\begin{enumerate}
+    \item If $x$ is already a candidate, increment its count.
+    \item Else if there are fewer than $k-1$ candidates, add $x$ with count 1.
+    \item Else decrement all candidate counts by 1 and evict any candidates whose count reaches zero.
+\end{enumerate}
+
+\subsection{Guarantee}
+Any item appearing more than $N/k$ times in a stream of $N$ elements is guaranteed to be among the surviving candidates. The additive error on frequency estimates is bounded by $N/k$.
+
+\subsection{Sliding-Window Extension}
+In our implementation, a sliding window constraint ensures that only events within a recent time window contribute to the heavy hitter computation. This is essential for detecting \textit{concept drift} --- when the distribution of popular items changes over time. Old entries age out naturally, allowing the algorithm to react to new trends within seconds.
+
+\subsection{Parameter Templates Used}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l c c}
+\toprule
+\textbf{Template} & \textbf{$k$ (Candidates)} & \textbf{Error Bound} \\
+\midrule
+Low    & 50  & $N/50$ \\
+Medium & 200 & $N/200$ \\
+High   & 500 & $N/500$ \\
+\bottomrule
+\end{tabular}
+\caption{Misra--Gries parameter templates with corresponding error bounds.}
+\label{tab:mg_templates}
+\end{table}

@@ -1,0 +1,112 @@
+\documentclass[a4paper, 11pt, oneside]{Dissertation} 
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{latexsym}
+\usepackage{graphicx}
+\usepackage{multirow}
+%\usepackage{algorithm2e}
+\usepackage[english]{babel}
+\usepackage{longtable}
+\usepackage{algorithmicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[numbers]{natbib}
+\usepackage{url}
+\usepackage{float}
+
+\lstdefinestyle{DOS}
+{
+    backgroundcolor=\color{white},
+    basicstyle=\scriptsize\color{black}\ttfamily
+}
+
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatother
+
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+\graphicspath{{Figures/}{./}} % To include images in other directories
+
+\long\def\symbolfootnote[#1]#2{\begingroup%
+\def\thefootnote{\fnsymbol{footnote}}\footnote[#1]{#2}\endgroup}
+\renewcommand{\baselinestretch}{1.2}
+\onecolumn
+
+%% ----------------------------------------------------------------
+\begin{document}
+\sloppy
+\pagenumbering{roman}
+
+
+%%Cover Page
+\input{./AuxPages/title1.tex}
+
+%% COPYRIGHT PAGE
+\input{AuxPages/Copyright.tex}
+
+%% CERTIFICATE PAGE
+\input{AuxPages/certificate.tex}
+
+% ACKNOWLEDGEMENTS PAGE
+\chapter*{Acknowledgments}
+\label{ch:ack}
+\input{AuxPages/acknowledgements.tex}
+
+% Abstract
+\chapter*{Abstract}
+\label{ch:abstract}
+\input{AuxPages/abstract.tex}
+
+
+
+\pagestyle{fancy}
+%--------------------------------------------------------
+\tableofcontents
+\listoffigures
+\listoftables
+\newpage
+
+%% ----------------------------------------------------------------
+\mainmatter	  
+
+\chapter{Introduction}
+\label{ch:intro}
+\lhead{ \emph{Chapter 1: Introduction}}
+\input{Chapters/Chapter1.tex}
+
+\chapter{Literature Review}
+\label{ch:literature}
+\lhead{ \emph{Chapter 2: Literature Review}}
+\input{Chapters/Chapter2.tex}
+
+\chapter{Proposed Work}
+\label{ch:new}
+\lhead{ \emph{Chapter 3: Proposed Work}}
+\input{Chapters/Chapter3.tex}
+
+\chapter{Simulation and Results}
+\label{ch:result}
+\lhead{ \emph{Chapter 4: Simulation and Results}}
+\input{Chapters/Chapter4.tex}
+
+\chapter{Conclusions and Future Work}
+\label{ch:conclude}
+\lhead{ \emph{Chapter 5: Conclusions}}
+\input{Chapters/conclusion.tex}
+%% ----------------------------------------------------------------
+
+\addtotoc{Bibliography}
+\addtocontents{toc}{\vspace{2em}}
+\newpage
+\lhead{ \emph{Bibliography}}
+\bibliographystyle{ieeetr}
+\bibliography{bibch1}
+
+\end{document}  % The End
+%% ----------------------------------------------------------------

@@ -1,0 +1,41 @@
+\section{Project Context and Motivation}
+
+In the era of big data, high-throughput systems such as online advertising platforms, cloud network telemetry dashboards, social media networks, and IoT sensor meshes routinely ingest millions of disparate events every single second into their message brokers. In these hyperscale environments, standard batch-processing databases simply cannot maintain pace, requiring specialized stream-processing capabilities. Extracting actionable aggregate signals in real time is a critical imperative for identifying DDoS attacks, detecting trending hashtags, measuring application latency, or determining unique daily active users.
+
+However, solving these analytics problems \textit{exactly} over an unbounded, continuous stream requires keeping an explicit state for every unique key encountered. As the data velocity grows, this incurs an unbounded $O(N)$ linear memory footprint, leading to severe garbage collection pauses, disk spilling latency, and ultimately violating real-time alerting limits. As noted by Muthukrishnan~\cite{muthukrishnan2005data}, streaming algorithms that process data in a single pass with sub-linear space are essential for modern data-intensive applications.
+
+\section{Problem Addressed}
+
+To circumvent the inherent hardware limits, stream processing relies on approximation. The problem addressed in this project involves designing a unified stream analytics platform that computes approximations using sub-linear algorithms, specifically focusing on three core query types:
+
+\begin{itemize}
+    \item \textbf{Point Frequency Estimation:} Given a key $x$, estimate how many times $x$ has appeared in the stream so far.
+    \item \textbf{Cardinality Estimation:} Estimate the total number of distinct elements observed in the stream.
+    \item \textbf{Heavy Hitter Detection:} Identify the most frequently occurring items in a recent sliding window.
+\end{itemize}
+
+The primary challenge lies not merely in implementing these algorithms, but in building a resilient distributed system that seamlessly scales these algorithms across multiple worker nodes without losing data integrity and exposing them through a user-friendly API and dashboard. Furthermore, the parameters of the mathematical representations (e.g., hash depth, register size) are historically static --- a trade-off usually made at deployment time resulting in suboptimal latency behavior when memory conditions vary under load.
+
+\section{Existing Approaches}
+
+Several existing systems address parts of this problem space in isolation:
+
+\subsection{Apache Flink and Spark Streaming}
+Frameworks like Apache Flink and Spark Streaming provide general-purpose distributed stream processing. However, their sketch implementations are typically static, and they do not provide built-in adaptive parameter tuning mechanisms that react to runtime memory pressure or latency SLA violations.
+
+\subsection{Standalone Sketch Libraries}
+Libraries such as Apache DataSketches provide high-quality implementations of probabilistic data structures. While algorithmically robust, they operate as standalone libraries and do not include the distributed orchestration, state federation, or real-time visualization capabilities needed for a complete analytics platform.
+
+\section{Proposed Phase 1 Objectives}
+
+To tackle the static limitation of exact state storage, Phase 1 of this project is dedicated to engineering the baseline framework consisting of robust probabilistic estimators. The specific objectives achieved in Phase 1 encompass:
+
+\begin{itemize}
+    \item \textbf{High-Velocity Ingestion Pipeline:} Building a stream generation service using Apache Kafka~\cite{kafka} that publishes synthetic, heavily-skewed Zipfian data~\cite{zipf} to a distributed topic.
+    \item \textbf{Algorithmic Fidelity:} Static implementation of the Count-Min Sketch~\cite{cms}, HyperLogLog~\cite{hll}, and Misra--Gries~\cite{misra} algorithms with mathematically bounded accuracy.
+    \item \textbf{Dual-Language Worker Profiling:} Building independent analytics worker processes in both Python and hardware-accelerated C++ utilizing modern standard features to ensure maximum throughput.
+    \item \textbf{Federated State Store:} Deploying Redis~\cite{redis} as a shared state store for real-time metric aggregation across all worker nodes.
+    \item \textbf{Real-Time Dashboard:} Developing a unified web dashboard backed by a FastAPI~\cite{fastapi} web server to provide an interactive and comprehensive window into metric computations and cluster health.
+\end{itemize}
+
+Achieving this architectural baseline sets the stage for the dynamic scheduling heuristics and adaptive controllers planned for the concluding phases of this investigation.

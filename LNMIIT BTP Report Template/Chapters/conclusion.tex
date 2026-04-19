@@ -1,0 +1,35 @@
+\section{Summary of Phase~1 Achievements}
+
+Phase~1 of the \textit{Adaptive Real-Time Stream Analytics} project has successfully achieved all proposed foundational milestones:
+
+\begin{enumerate}
+    \item \textbf{Stream Ingestion:} A robust Kafka-based ingestion pipeline was built with support for configurable Zipfian traffic generation and concept drift simulation.
+    \item \textbf{Probabilistic Sketches:} Three core algorithms --- Count-Min Sketch~\cite{cms}, HyperLogLog~\cite{hll}, and Sliding-Window Misra--Gries~\cite{misra} --- were implemented with mathematically verified error bounds.
+    \item \textbf{Dual-Language Workers:} Both Python and high-performance C++ analytics workers were developed as interchangeable drop-in components writing to the same Redis state store.
+    \item \textbf{Federated State Management:} Redis~\cite{redis} was deployed as a shared blackboard with TTL-based automatic eviction of stale worker entries.
+    \item \textbf{REST API:} A comprehensive FastAPI~\cite{fastapi} backend was built with query, metrics, and control endpoints.
+    \item \textbf{Real-Time Dashboard:} An interactive single-page web dashboard provides live visualization of all sketch estimates, system health, and worker performance metrics.
+    \item \textbf{Testing:} A 28-test Python unit test suite and a standalone simulation benchmark validate correctness without requiring any external infrastructure.
+\end{enumerate}
+
+\section{Future Work}
+
+Building directly upon this stable Phase~1 foundation, Phase~2 will introduce the two adaptive components that complete the proposed architecture:
+
+\begin{itemize}
+    \item \textbf{Dynamic Parameter Controller:} A background asyncio service that monitors per-worker P99 latency, memory pressure, and estimated sketch error. Based on configurable thresholds, the controller will automatically switch workers between Low, Medium, and High precision templates without dropping events. The controller loop is formalized as:
+    \begin{equation}
+        C(\theta, r) = \alpha \cdot \text{LatencyViolation}(\theta, r) + \beta \cdot \text{Memory}(\theta) + \gamma \cdot \text{AccuracyPenalty}(\theta, r)
+    \end{equation}
+    where $\theta$ denotes the set of sketch parameters and $r$ is the routing decision.
+
+    \item \textbf{Load-Aware Request Router:} Instead of round-robin query distribution, incoming queries will be scored against all alive worker nodes using a utility function:
+    \begin{equation}
+        \text{score}_i(q) = w_1 \cdot \frac{A_i^{\text{capability}}}{\alpha_q} - w_2 \cdot \frac{L_i^{p95}}{L_q} - w_3 \cdot M_i^{\text{usage}}
+    \end{equation}
+    The query will be forwarded to the highest-scoring node, balancing accuracy capability, latency, and memory utilization.
+
+    \item \textbf{Robustness Testing:} Failure injection experiments (killing workers mid-stream, inducing memory pressure, varying traffic rates) will validate the system's resilience.
+
+    \item \textbf{Comparative Evaluation:} A systematic comparison of all four experimental configurations (static baseline, adaptive-only, router-only, fully adaptive) will be conducted to quantify the benefits of each component.
+\end{itemize}

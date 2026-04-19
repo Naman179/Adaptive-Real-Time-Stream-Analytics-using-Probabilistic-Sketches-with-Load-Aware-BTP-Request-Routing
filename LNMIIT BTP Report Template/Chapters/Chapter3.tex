@@ -1,0 +1,109 @@
+\section{System Architecture Overview}
+
+The system architecture implemented in Phase~1 ensures completely decoupled stream ingestion, multi-layered processing, and real-time visualization. The design isolates failure domains: if the downstream analytics nodes suffer excessive load and terminate, the ingestion pipeline reliably buffers messages via Kafka offset tracking. Figure~\ref{fig:arch_diagram} illustrates the logical separation between each tier.
+
+\begin{figure}[htbp]
+    \centering
+    % PLACEHOLDER: Replace with your architecture diagram image in Overleaf
+    % \includegraphics[width=0.85\textwidth]{Figures/architecture_diagram.png}
+    \framebox[\textwidth]{\rule{0pt}{7cm}\parbox{0.8\textwidth}{\centering\Large\textbf{[PLACEHOLDER]}\\[1em]\normalsize Upload your architecture diagram to the \texttt{Figures/} folder in Overleaf and uncomment the \texttt{includegraphics} line above.}}
+    \caption{High-level data flow pipeline illustrating logical decoupling between the stream producer, Kafka broker, analytics workers, Redis state store, FastAPI server, and web dashboard.}
+    \label{fig:arch_diagram}
+\end{figure}
+
+The system is composed of five primary layers:
+\begin{enumerate}
+    \item \textbf{Stream Producer} --- Generates synthetic Zipfian-distributed events and publishes them to a Kafka topic.
+    \item \textbf{Apache Kafka Broker} --- Acts as the durable, high-throughput message bus decoupling producers from consumers.
+    \item \textbf{Analytics Worker Fleet} --- Independent worker processes (Python or C++) that consume events, update local sketch instances, and periodically report metrics.
+    \item \textbf{Redis State Store} --- A shared in-memory key-value store federating metrics from all workers.
+    \item \textbf{FastAPI Server + Web Dashboard} --- Serves REST API endpoints and an interactive HTML5 dashboard for real-time monitoring.
+\end{enumerate}
+
+\section{Stream Ingestion Pipeline}
+
+\subsection{Zipfian Traffic Generation}
+A standard problem in stream analytics is addressing traffic skew organically. Real-world traffic follows a power-law distribution where a small number of items account for the majority of events~\cite{zipf}. Our Stream Producer generates synthetic events following a Zipfian distribution with a configurable skewness parameter (default $s = 1.2$). Each event is published as a JSON message to the Kafka topic \texttt{stream\_events}:
+
+\begin{lstlisting}[language=Python, caption=Sample event format published to Kafka.]
+{"key": "item_42", "ts": 1710000000.123}
+\end{lstlisting}
+
+\subsection{Apache Kafka Integration}
+Apache Kafka~\cite{kafka} serves as the durable event broker. Key design decisions include:
+\begin{itemize}
+    \item Each analytics worker uses a \textbf{unique consumer group}, ensuring every worker receives \textbf{all} events independently. This is an analytics fan-out pattern where each node maintains its own full sketch copy.
+    \item Kafka's offset tracking provides natural backpressure support and fault tolerance.
+    \item The producer supports configurable event rates (default: 5,000 events/second) and stream durations.
+\end{itemize}
+
+\subsection{Concept Drift Simulation}
+Production data is non-stationary, meaning trending items shift rapidly over time. To simulate this reliably, the producer supports a \texttt{--shift-interval} parameter. When enabled, the Zipfian rank distribution is periodically rotated: the most frequent item is swapped with a random item from the tail of the distribution. This effectively stresses the sliding-window expiration logic in the downstream Misra--Gries estimator, forcing it to ``forget'' old trends and detect new ones.
+
+\section{Analytics Worker Design}
+
+Workers ingest events asynchronously from their independent Kafka consumer groups. Each worker maintains local instances of all three sketch data structures and periodically serializes its metrics to Redis.
+
+\subsection{Python Worker}
+The standard Python worker uses the \texttt{kafka-python-ng} library for Kafka consumption and the \texttt{mmh3} library for non-cryptographic MurmurHash3 hashing. Key implementation details:
+\begin{itemize}
+    \item Sketches are updated synchronously on each event arrival.
+    \item P99 latency is computed using a rolling window of the last 1,000 update times.
+    \item CPU and memory usage are sampled via \texttt{psutil}.
+    \item Metrics are pushed to Redis every 2 seconds.
+\end{itemize}
+
+\subsection{High-Performance C++ Worker}
+To profile theoretical performance ceilings, a high-performance C++20 drop-in replacement worker was engineered. It connects to Kafka via \texttt{librdkafka} and writes to the same Redis keys, so the Python API, dashboard, and controller work unchanged. Key performance advantages include:
+
+\begin{itemize}
+    \item \textbf{XXH64 Hashing:} The xxHash (XXH64) non-cryptographic hash function provides approximately $10\times$ faster throughput compared to SHA-256, which is critical for per-event hash computations.
+    \item \textbf{Hardware-Accelerated Bit Counting:} The \texttt{std::countl\_zero()} function compiles to a single CPU instruction (\texttt{LZCNT} or \texttt{BSR}) for HyperLogLog's leading-zero computation, compared to a Python while-loop.
+    \item \textbf{Concurrent Reads:} A \texttt{std::shared\_mutex} allows concurrent read access to sketch state without the serialization imposed by Python's Global Interpreter Lock (GIL).
+\end{itemize}
+
+\section{Federated State Store}
+
+Redis~\cite{redis} serves as the shared ``blackboard'' between all system components. Table~\ref{tab:redis_keys} summarizes the key schema.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l l l l}
+\toprule
+\textbf{Key Pattern} & \textbf{Contents} & \textbf{Written By} & \textbf{Read By} \\
+\midrule
+\texttt{worker:\{id\}:metrics}    & P99, mem\%, CMS error, HLL est. & Worker     & API, Dashboard \\
+\texttt{worker:\{id\}:latency\_history} & Last 50 P99 samples       & Worker     & Dashboard \\
+\texttt{worker:\{id\}:cmd}        & Controller commands             & Controller & Worker \\
+\texttt{controller:log}           & Decision log                    & Controller & Dashboard \\
+\texttt{router:query\_log}        & Routing decisions                & Router     & Dashboard \\
+\bottomrule
+\end{tabular}
+\caption{Redis key schema used for inter-component communication.}
+\label{tab:redis_keys}
+\end{table}
+
+All keys are set with a 60-second TTL (Time To Live). If a worker crashes or becomes unreachable, its keys automatically expire and the worker is evicted from the dashboard and router scoring, preventing stale data from affecting decisions.
+
+\section{Analytics API}
+
+The backend is built on FastAPI~\cite{fastapi}, a modern asynchronous Python web framework. The API server serves both the REST endpoints and the static dashboard files. Table~\ref{tab:api_endpoints} lists the key endpoints implemented in Phase~1.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l l l}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+GET  & \texttt{/query/frequency?key=X}   & CMS frequency estimate for key $X$ \\
+GET  & \texttt{/query/cardinality}        & HLL distinct count estimate \\
+GET  & \texttt{/query/heavy-hitters?n=10} & Top-$N$ Misra--Gries heavy hitters \\
+GET  & \texttt{/metrics/cluster}          & Live health metrics for all workers \\
+GET  & \texttt{/metrics/sketches}         & Current sketch parameters per worker \\
+POST & \texttt{/control/set-params}       & Force a precision template on a worker \\
+GET  & \texttt{/health}                   & Liveness probe \\
+\bottomrule
+\end{tabular}
+\caption{REST API endpoints implemented in Phase~1.}
+\label{tab:api_endpoints}
+\end{table}
